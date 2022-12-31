@@ -1,7 +1,8 @@
 /*
-	Project : Broadcast by waves demo for SDI course
-	Author : Guillaume Riondet/Nabil Abdennadher
-	Date : December 2021
+	Project : Gnutella Node
+	Author : Jonatan Baumgartner
+	Date : December 2022
+	Based on a previous project by : Guillaume Riondet/Nabil Abdennadher
 	All nodes are executed on the same machine. Each of them is represented by an IP (127.0.1.X)
 	For MAC OS: to get loopback adresses other than 127.0.0.1, use this command:
 	sudo ifconfig lo0 alias 127.0.1.X (this program is using AP addresses: 127.0.1.X, X ranging from 1 to 8)
@@ -15,7 +16,7 @@
 	sudo ifconfig lo0 alias 127.0.1.7
 	sudo ifconfig lo0 alias 127.0.1.8
 
-	go run broadcastbywaves.go
+	go run GnutellaNode.go
 
 */
 
