@@ -79,7 +79,6 @@ func send(nodeAddress string, neighAddress string) {
 	outConn, err := net.Dial("tcp", neighAddress+PORT)
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 	outConn.Write([]byte(nodeAddress))
 	outConn.Close()
