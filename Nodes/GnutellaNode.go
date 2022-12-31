@@ -71,7 +71,6 @@ func Log(file *os.File, message string) {
 	if err != nil {
 		panic(err)
 	}
-	//long++
 
 }
 
@@ -86,30 +85,25 @@ func send(nodeAddress string, neighAddress string) {
 	outConn.Close()
 }
 
-func sendToAllNeighbours(node yamlConfig, typem string) {
+func sendToAllNeighbours(node yamlConfig, msg string) {
 	for _, neigh := range node.Neighbours {
-		go send(node.Address+";"+typem, neigh.Address)
+		go send(msg, neigh.Address)
 	}
 }
-func sendToAllNeighboursExceptOne(node yamlConfig, id int, typem string) {
+func sendToAllNeighboursExceptOne(node yamlConfig, ip string, msg string) {
 	for _, neigh := range node.Neighbours {
-		if id!=neigh.ID{
-			go send(node.Address+";"+typem, neigh.Address)
+		if ip != neigh.Address {
+			go send(msg, neigh.Address)
 		}
 	}
 }
-func sendToOneNeighbours(node yamlConfig, id int, typem string) {
-	for _, neigh := range node.Neighbours {
-		if id==neigh.ID{
-			go send(node.Address+";"+typem, neigh.Address)
-		}
-	}
+func sendToOne(ip string, msg string) {
+	go send(msg, ip)
 }
 
-func server(neighboursFilePath string, isStartingPoint bool) {
+func server(neighboursFilePath string) {
 
 	var node yamlConfig = initAndParseFileNeighbours(neighboursFilePath)
-	var nbNei int = len(node.Neighbours)
 	filename := "Log-" + node.Address
 	file, err := os.Create(filename)
 	if err != nil {
@@ -124,61 +118,71 @@ func server(neighboursFilePath string, isStartingPoint bool) {
 		log.Fatal(err)
 		return
 	}
-	var parent []int
-	var children []int
-	var Nchildren[]int
-
-	Log(file, "Starting algorithm ...\n")
-	if isStartingPoint {
-		Log(file, "Starting point\n")
-		parent = append(parent, 0)
-		go sendToAllNeighbours(node, "M")
-		nbNei++
+	filesInWarehouse, err := ioutil.ReadDir("Warehouses/" + strconv.Itoa(node.ID))
+	if err != nil {
+		log.Fatal(err)
+		return
 	}
+	processedRequests := make(map[string]string)
+	clientRequests := make(map[string]string)
 
-	for len(children) + len(Nchildren) + len(parent) < nbNei {
+	//receive messages
+	for true {
 		conn, _ := ln.Accept()
 		message, _ := bufio.NewReader(conn).ReadString('\n')
 		conn.Close()
 		Log(file, "Message received : "+message+"\n")
-		address := strings.Split(message, ";")[0]
-		messageType := strings.Split(message, ";")[1]
-		for _, neigh := range node.Neighbours {
-			if neigh.Address == address{
-				switch messageType{
-				case "M":
-					if len(parent) == 0{
-						parent = append(parent, neigh.ID)
-						Log(file, "Parent: "+strconv.Itoa(neigh.ID)+"\n")
-						sendToOneNeighbours(node, neigh.ID, "P")
-						sendToAllNeighboursExceptOne(node, neigh.ID, "M")
-					}else {
-						sendToOneNeighbours(node, neigh.ID, "R")
+		decodedMessage := strings.Split(message, ";")
+		messageType := decodedMessage[0]
+		switch messageType {
+		case "Q":
+			//Query
+			if _, ok := processedRequests[decodedMessage[1]]; !ok {
+				processedRequests[decodedMessage[1]] = decodedMessage[4]
+				ttl, _ := strconv.Atoi(decodedMessage[3])
+				if ttl > 1 {
+					ttl--
+					for _, f := range filesInWarehouse {
+						if strings.Contains(strings.ToLower(f.Name()), strings.ToLower(decodedMessage[2])) {
+							sendToOne(decodedMessage[4], "R;"+decodedMessage[1]+";"+f.Name()+";"+node.Address)
+						}
 					}
-				case "P":
-					children = append(children, neigh.ID)
-					Log(file, "New children: "+strconv.Itoa(neigh.ID)+"\n")
-				case "R":
-					Nchildren = append(Nchildren, neigh.ID)
+					sendToAllNeighboursExceptOne(node, decodedMessage[4], "Q;"+decodedMessage[1]+";"+decodedMessage[2]+";"+strconv.Itoa(ttl)+";"+node.Address)
 				}
 			}
+		case "R":
+			//Response
+			if _, ok := processedRequests[decodedMessage[1]]; !ok {
+				if _, ok := clientRequests[decodedMessage[1]]; ok {
+					sendToOne(clientRequests[decodedMessage[1]], message)
+				}
+			} else {
+				sendToOne(processedRequests[decodedMessage[1]], message)
+			}
+		case "C":
+			//Client request
+			clientRequests[decodedMessage[1]] = decodedMessage[3]
+			for _, f := range filesInWarehouse {
+				if strings.Contains(strings.ToLower(f.Name()), strings.ToLower(decodedMessage[2])) {
+					sendToOne(decodedMessage[3], "R;"+decodedMessage[1]+";"+f.Name()+";"+node.Address)
+				}
+			}
+			sendToAllNeighbours(node, "Q;"+decodedMessage[1]+";"+decodedMessage[2]+";5;"+node.Address)
 		}
-			
 
 	}
-	
+
 }
 
 func main() {
-	
-	go server("node-2.yaml", false)
-	go server("node-3.yaml", false)
-	go server("node-4.yaml", false)
-	go server("node-5.yaml", false)
-	go server("node-6.yaml", false)
-	go server("node-7.yaml", false)
-	go server("node-8.yaml", false)
-	time.Sleep(2 * time.Second)
-	server("node-1.yaml", true)
+
+	go server("node-2.yaml")
+	go server("node-3.yaml")
+	go server("node-4.yaml")
+	go server("node-5.yaml")
+	go server("node-6.yaml")
+	go server("node-7.yaml")
+	go server("node-8.yaml")
+	server("node-1.yaml")
 	time.Sleep(2 * time.Second)
 }
